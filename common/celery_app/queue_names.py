@@ -1,12 +1,9 @@
 # Централизованные имена очередей для Celery
-EMBEDDINGS_GPU_QUEUE = "embeddings_gpu"
-SCORING_TASKS_QUEUE = "scoring_tasks"
-DEFAULT_QUEUE = "default"
-FILLOUT_QUEUE = "fillout"
-SEARCH_BASIC_QUEUE = "search_basic"
+# Очереди по техническим функциям
 
-# Новые очереди для улучшенной системы
-CPU_INTENSIVE_QUEUE = "cpu_intensive"  # Для парсинга документов
-SYSTEM_QUEUE = "system"  # Для системных задач (GPU проверки)
-AI_ANALYSIS_QUEUE = "ai_analysis"  # Для AI анализа на GPU
-EMBEDDINGS_CPU_QUEUE = "embeddings_cpu"  # Для эмбеддингов на CPU (fallback)
+# Технические очереди
+FILLOUT_PROCESSING_QUEUE = "fillout_processing"  # Получение данных из внешних источников (Fillout API)
+TEXT_PROCESSING_QUEUE = "text_processing"        # Обработка и парсинг текстов (резюме, вакансии)
+EMBEDDINGS_QUEUE = "embeddings"                   # Генерация эмбеддингов
+RERANKING_QUEUE = "reranking"                     # AI-переранжирование результатов
+ORCHESTRATION_QUEUE = "orchestration"            # Управление workflow и координация задач

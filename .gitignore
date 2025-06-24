@@ -1,0 +1,9 @@
+.github/instructions/instructions.instructions.md
+.env
+
+.venv/
+.venv-py311/
+__pycache__*
+*.log
+docs/
+.DS_Store

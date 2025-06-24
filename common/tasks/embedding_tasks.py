@@ -1,5 +1,5 @@
 """
-Celery задачи для работы с эмбеддингами
+Celery задачи для работы с эмбеддингами (очищенная версия)
 """
 
 import os
@@ -7,6 +7,7 @@ import sys
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import traceback
 
 # Добавляем корневую папку в путь
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,15 +24,13 @@ from models.embeddings import EmbeddingMetadata
 from utils.chroma_config import chroma_client, ChromaConfig
 from utils.text_preprocessing import preprocess_resume_text, preprocess_job_description_text, preprocess_text_with_stats
 
-# Импортируем Celery app только когда он будет создан
-def get_celery_app():
-    from celery_app.celery_config import celery_app
-    return celery_app
+# Импортируем Celery app напрямую
+from celery_app.celery_app import celery_app
 
 logger = get_task_logger(__name__)
 
 
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.generate_resume_embeddings')
+@celery_app.task(bind=True, name='tasks.embedding_tasks.generate_resume_embeddings')
 def generate_resume_embeddings(self, submission_ids: Optional[List[str]] = None):
     """
     Генерация эмбеддингов для резюме кандидатов
@@ -40,6 +39,10 @@ def generate_resume_embeddings(self, submission_ids: Optional[List[str]] = None)
         submission_ids: Список ID заявок для обработки. Если None, обрабатываются все заявки с сырым текстом
     """
     logger.info("🔄 Начинаем генерацию эмбеддингов для резюме")
+    
+    # Исправление: фильтруем входные данные, если они не список строк (UUID)
+    if not (isinstance(submission_ids, list) and all(isinstance(x, str) for x in submission_ids)):
+        submission_ids = None
     
     db = database.get_session()
     try:
@@ -132,9 +135,9 @@ def generate_resume_embeddings(self, submission_ids: Optional[List[str]] = None)
                     'source_type': 'resume',
                     'created_at': datetime.now().isoformat(),
                     'model': ChromaConfig.EMBEDDING_MODEL,
-                    'preprocessing_stats': preprocessing_stats,
                     'original_length': preprocessing_stats['original_length'],
-                    'processed_length': preprocessing_stats['processed_length']
+                    'processed_length': preprocessing_stats['processed_length'],
+                    'compression_ratio': round(preprocessing_stats['compression_ratio'], 4)
                 }
                 
                 # Добавляем дополнительную информацию если есть
@@ -194,20 +197,28 @@ def generate_resume_embeddings(self, submission_ids: Optional[List[str]] = None)
         
     except Exception as e:
         logger.error(f"❌ Критическая ошибка при генерации эмбеддингов резюме: {str(e)}")
+        tb = traceback.format_exc()
         self.update_state(
             state='FAILURE',
             meta={
                 'progress': 0,
                 'status': f'Ошибка: {str(e)}',
-                'error': str(e)
+                'error_type': type(e).__name__,
+                'error_message': str(e),
+                'traceback': tb
             }
         )
-        raise
+        return {
+            'status': 'failed',
+            'error_type': type(e).__name__,
+            'error_message': str(e),
+            'traceback': tb
+        }
     finally:
         db.close()
 
 
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.generate_job_embeddings')
+@celery_app.task(bind=True, name='tasks.embedding_tasks.generate_job_embeddings')
 def generate_job_embeddings(self, job_ids: Optional[List[int]] = None):
     """
     Генерация эмбеддингов для описаний вакансий
@@ -216,6 +227,10 @@ def generate_job_embeddings(self, job_ids: Optional[List[int]] = None):
         job_ids: Список ID вакансий для обработки. Если None, обрабатываются все вакансии с сырым текстом
     """
     logger.info("🔄 Начинаем генерацию эмбеддингов для вакансий")
+    
+    # Исправление: фильтруем входные данные, если они не список int
+    if not (isinstance(job_ids, list) and all(isinstance(x, int) for x in job_ids)):
+        job_ids = None
     
     db = database.get_session()
     try:
@@ -317,9 +332,9 @@ def generate_job_embeddings(self, job_ids: Optional[List[int]] = None):
                     'experience_level': job.experience_level or '',
                     'location': job.location or '',
                     'is_active': job.is_active if job.is_active is not None else True,
-                    'preprocessing_stats': preprocessing_stats,
                     'original_length': preprocessing_stats['original_length'],
-                    'processed_length': preprocessing_stats['processed_length']
+                    'processed_length': preprocessing_stats['processed_length'],
+                    'compression_ratio': round(preprocessing_stats['compression_ratio'], 4)
                 }
                 
                 # Добавляем информацию о компании если есть
@@ -379,20 +394,28 @@ def generate_job_embeddings(self, job_ids: Optional[List[int]] = None):
         
     except Exception as e:
         logger.error(f"❌ Критическая ошибка при генерации эмбеддингов вакансий: {str(e)}")
+        tb = traceback.format_exc()
         self.update_state(
             state='FAILURE',
             meta={
                 'progress': 0,
                 'status': f'Ошибка: {str(e)}',
-                'error': str(e)
+                'error_type': type(e).__name__,
+                'error_message': str(e),
+                'traceback': tb
             }
         )
-        raise
+        return {
+            'status': 'failed',
+            'error_type': type(e).__name__,
+            'error_message': str(e),
+            'traceback': tb
+        }
     finally:
         db.close()
 
 
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.search_similar_resumes')
+@celery_app.task(bind=True, name='tasks.embedding_tasks.search_similar_resumes')
 def search_similar_resumes(self, query_text: str, limit: int = 10, min_similarity: float = 0.7):
     """
     Поиск похожих резюме по текстовому запросу
@@ -457,7 +480,7 @@ def search_similar_resumes(self, query_text: str, limit: int = 10, min_similarit
         db.close()
 
 
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.search_similar_jobs')
+@celery_app.task(bind=True, name='tasks.embedding_tasks.search_similar_jobs')
 def search_similar_jobs(self, query_text: str, limit: int = 10, min_similarity: float = 0.7):
     """
     Поиск похожих вакансий по текстовому запросу
@@ -526,674 +549,16 @@ def search_similar_jobs(self, query_text: str, limit: int = 10, min_similarity: 
         db.close()
 
 
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.cleanup_embeddings')
-def cleanup_embeddings(self):
+@celery_app.task(bind=True, name='tasks.embedding_tasks.generate_all_embeddings')
+def generate_all_embeddings(self, previous_results=None) -> Dict[str, Any]:
     """
-    Очистка устаревших эмбеддингов
-    Удаляет эмбеддинги для несуществующих записей
+    Генерация всех эмбеддингов: резюме и вакансий
+    (Оркестрация теперь на уровне workflow, задача только для совместимости)
     """
-    logger.info("🧹 Начинаем очистку устаревших эмбеддингов")
-    
-    db = database.get_session()
-    try:
-        deleted_count = 0
-        
-        # Очистка эмбеддингов резюме
-        resume_embeddings = embedding_crud.get_by_collection(db, ChromaConfig.RESUME_COLLECTION)
-        resume_collection = chroma_client.get_resume_collection()
-        
-        for embedding in resume_embeddings:
-            # Проверяем, существует ли заявка
-            try:
-                submission_uuid = uuid.UUID(getattr(embedding, 'source_id'))
-                submission = SubmissionCRUD().get_by_id(db, submission_uuid)
-                if not submission or not getattr(submission, 'resume_raw_text', None):
-                    # Удаляем из ChromaDB
-                    try:
-                        resume_collection.delete(ids=[getattr(embedding, 'chroma_document_id')])
-                    except:
-                        pass  # Документ может уже не существовать в ChromaDB
-                    
-                    # Удаляем из PostgreSQL
-                    db.delete(embedding)
-                    deleted_count += 1
-                    logger.info(f"🗑️ Удален эмбеддинг для несуществующего резюме {getattr(embedding, 'source_id')}")
-            except ValueError:
-                # Неверный UUID, удаляем эмбеддинг
-                try:
-                    resume_collection.delete(ids=[getattr(embedding, 'chroma_document_id')])
-                except:
-                    pass
-                db.delete(embedding)
-                deleted_count += 1
-        
-        # Очистка эмбеддингов вакансий
-        job_embeddings = embedding_crud.get_by_collection(db, ChromaConfig.JOB_COLLECTION)
-        job_collection = chroma_client.get_job_collection()
-        
-        for embedding in job_embeddings:
-            # Проверяем, существует ли вакансия
-            try:
-                job_id = int(getattr(embedding, 'source_id'))
-                job = JobCRUD().get_by_id(db, job_id)
-                if not job or not getattr(job, 'job_description_raw_text', None):
-                    # Удаляем из ChromaDB
-                    try:
-                        job_collection.delete(ids=[getattr(embedding, 'chroma_document_id')])
-                    except:
-                        pass  # Документ может уже не существовать в ChromaDB
-                    
-                    # Удаляем из PostgreSQL
-                    db.delete(embedding)
-                    deleted_count += 1
-                    logger.info(f"🗑️ Удален эмбеддинг для несуществующей вакансии {getattr(embedding, 'source_id')}")
-            except (ValueError, TypeError):
-                # Неверный ID, удаляем эмбеддинг
-                try:
-                    job_collection.delete(ids=[getattr(embedding, 'chroma_document_id')])
-                except:
-                    pass
-                db.delete(embedding)
-                deleted_count += 1
-        
-        db.commit()
-        
-        logger.info(f"✅ Очистка завершена. Удалено {deleted_count} устаревших эмбеддингов")
-        
-        return {
-            'status': 'completed',
-            'deleted_count': deleted_count
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка очистки эмбеддингов: {str(e)}")
-        raise
-    finally:
-        db.close()
-
-
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.recreate_all_embeddings_with_preprocessing')
-def recreate_all_embeddings_with_preprocessing(self, force_recreate: bool = False):
-    """
-    Пересоздание всех эмбеддингов с применением предобработки текста
-    
-    Args:
-        force_recreate: Если True, пересоздаёт все эмбеддинги принудительно.
-                       Если False, пересоздаёт только те, которые были созданы без предобработки.
-    """
-    logger.info("🔄 Начинаем пересоздание всех эмбеддингов с предобработкой")
-    
-    db = database.get_session()
-    try:
-        # Обновляем прогресс
-        self.update_state(state='PROGRESS', meta={'progress': 5, 'status': 'Инициализация и проверка систем'})
-        
-        # Проверяем доступность ChromaDB
-        if not chroma_client.health_check():
-            logger.error("❌ ChromaDB недоступен")
-            raise Exception("ChromaDB недоступен")
-        
-        # Получаем коллекции
-        config = ChromaConfig()
-        resume_collection = chroma_client.get_collection(config.resume_collection_name)
-        job_collection = chroma_client.get_collection(config.job_collection_name)
-        
-        # Обновляем прогресс
-        self.update_state(state='PROGRESS', meta={'progress': 10, 'status': 'Подсчёт данных для обработки'})
-        
-        # Подсчитываем количество заявок и вакансий
-        submission_crud = SubmissionCRUD()
-        job_crud = JobCRUD()
-        
-        # Получаем все заявки с сырым текстом
-        all_submissions = db.query(Submission).filter(
-            Submission.resume_raw_text.isnot(None),
-            Submission.resume_raw_text != ''
-        ).all()
-        
-        # Получаем все вакансии с описанием
-        all_jobs = db.query(Job).filter(
-            Job.description.isnot(None),
-            Job.description != ''
-        ).all()
-        
-        total_submissions = len(all_submissions)
-        total_jobs = len(all_jobs)
-        total_items = total_submissions + total_jobs
-        
-        logger.info(f"📊 Найдено для обработки: {total_submissions} резюме, {total_jobs} вакансий")
-        
-        if total_items == 0:
-            logger.info("ℹ️ Нет данных для обработки")
-            return {
-                'status': 'completed',
-                'processed_resumes': 0,
-                'processed_jobs': 0,
-                'errors': 0
-            }
-        
-        # Статистика обработки
-        processed_resumes = 0
-        processed_jobs = 0
-        errors = 0
-        
-        # Обрабатываем резюме
-        logger.info("🔄 Начинаем пересоздание эмбеддингов для резюме")
-        
-        for i, submission in enumerate(all_submissions):
-            try:
-                progress = 10 + (i / total_items) * 80
-                self.update_state(
-                    state='PROGRESS',
-                    meta={
-                        'progress': int(progress),
-                        'status': f'Обработка резюме {i + 1}/{total_submissions}',
-                        'current_item': f"{submission.candidate.first_name} {submission.candidate.last_name}",
-                        'processed_resumes': processed_resumes,
-                        'processed_jobs': processed_jobs,
-                        'errors': errors
-                    }
-                )
-                
-                # Проверяем, нужно ли пересоздавать эмбеддинг
-                should_recreate = force_recreate
-                
-                if not force_recreate:
-                    # Проверяем, есть ли уже эмбеддинг и был ли он создан с предобработкой
-                    existing_embedding = embedding_crud.get_by_source_id_and_type(
-                        db, str(submission.submission_id), 'resume'
-                    )
-                    
-                    if existing_embedding:
-                        # Проверяем метаданные - если нет информации о предобработке, пересоздаём
-                        try:
-                            results = resume_collection.get(
-                                ids=[existing_embedding.chroma_document_id],
-                                include=['metadatas']
-                            )
-                            
-                            if results['metadatas'] and len(results['metadatas']) > 0:
-                                metadata = results['metadatas'][0]
-                                # Если нет информации о предобработке, пересоздаём
-                                if 'preprocessing_stats' not in metadata:
-                                    should_recreate = True
-                                    logger.info(f"🔄 Эмбеддинг для резюме {submission.submission_id} будет пересоздан (без предобработки)")
-                                else:
-                                    logger.info(f"✅ Эмбеддинг для резюме {submission.submission_id} уже создан с предобработкой")
-                            else:
-                                should_recreate = True
-                        except Exception as e:
-                            logger.warning(f"⚠️ Ошибка при проверке метаданных для резюме {submission.submission_id}: {e}")
-                            should_recreate = True
-                    else:
-                        should_recreate = True
-                
-                if should_recreate:
-                    # Удаляем существующий эмбеддинг если есть
-                    existing_embedding = embedding_crud.get_by_source_id_and_type(
-                        db, str(submission.submission_id), 'resume'
-                    )
-                    
-                    if existing_embedding:
-                        try:
-                            resume_collection.delete(ids=[existing_embedding.chroma_document_id])
-                        except Exception as e:
-                            logger.warning(f"⚠️ Не удалось удалить эмбеддинг из ChromaDB: {e}")
-                        
-                        db.delete(existing_embedding)
-                    
-                    # Предобрабатываем текст
-                    processed_text, preprocessing_stats = preprocess_text_with_stats(
-                        submission.resume_raw_text,
-                        config=None  # Используем стандартную конфигурацию для резюме
-                    )
-                    
-                    logger.info(f"📄 Предобработка резюме для {submission.candidate.first_name} {submission.candidate.last_name}: "
-                              f"было {preprocessing_stats['original_length']} символов, "
-                              f"стало {preprocessing_stats['processed_length']} символов "
-                              f"(сжатие: {preprocessing_stats['compression_ratio']:.2%})")
-                    
-                    # Создаём эмбеддинг
-                    embedding_response = chroma_client.create_embedding(processed_text)
-                    
-                    if embedding_response and 'embedding' in embedding_response:
-                        chroma_doc_id = str(uuid.uuid4())
-                        
-                        # Метаданные с информацией о предобработке
-                        metadata = {
-                            'submission_id': str(submission.submission_id),
-                            'candidate_name': f"{submission.candidate.first_name} {submission.candidate.last_name}",
-                            'candidate_email': submission.candidate.email or '',
-                            'preprocessing_stats': preprocessing_stats,
-                            'original_length': preprocessing_stats['original_length'],
-                            'processed_length': preprocessing_stats['processed_length'],
-                            'compression_ratio': preprocessing_stats['compression_ratio'],
-                            'created_with_preprocessing': True,
-                            'preprocessing_version': '1.0',
-                            'created_at': datetime.now().isoformat()
-                        }
-                        
-                        # Добавляем в ChromaDB
-                        resume_collection.add(
-                            documents=[processed_text],
-                            embeddings=[embedding_response['embedding']],
-                            metadatas=[metadata],
-                            ids=[chroma_doc_id]
-                        )
-                        
-                        # Сохраняем в PostgreSQL
-                        embedding_crud.create(db, {
-                            'source_id': str(submission.submission_id),
-                            'source_type': 'resume',
-                            'chroma_document_id': chroma_doc_id,
-                            'text_content': processed_text,
-                            'metadata': metadata
-                        })
-                        
-                        processed_resumes += 1
-                        logger.info(f"✅ Создан эмбеддинг для резюме: {submission.candidate.first_name} {submission.candidate.last_name}")
-                    else:
-                        errors += 1
-                        logger.error(f"❌ Не удалось создать эмбеддинг для резюме {submission.submission_id}")
-                
-            except Exception as e:
-                errors += 1
-                logger.error(f"❌ Ошибка при обработке резюме {submission.submission_id}: {str(e)}")
-                continue
-        
-        # Обрабатываем вакансии
-        logger.info("🔄 Начинаем пересоздание эмбеддингов для вакансий")
-        
-        for i, job in enumerate(all_jobs):
-            try:
-                progress = 10 + ((total_submissions + i) / total_items) * 80
-                self.update_state(
-                    state='PROGRESS',
-                    meta={
-                        'progress': int(progress),
-                        'status': f'Обработка вакансии {i + 1}/{total_jobs}',
-                        'current_item': job.title,
-                        'processed_resumes': processed_resumes,
-                        'processed_jobs': processed_jobs,
-                        'errors': errors
-                    }
-                )
-                
-                # Проверяем, нужно ли пересоздавать эмбеддинг
-                should_recreate = force_recreate
-                
-                if not force_recreate:
-                    # Проверяем, есть ли уже эмбеддинг и был ли он создан с предобработкой
-                    existing_embedding = embedding_crud.get_by_source_id_and_type(
-                        db, str(job.job_id), 'job'
-                    )
-                    
-                    if existing_embedding:
-                        # Проверяем метаданные
-                        try:
-                            results = job_collection.get(
-                                ids=[existing_embedding.chroma_document_id],
-                                include=['metadatas']
-                            )
-                            
-                            if results['metadatas'] and len(results['metadatas']) > 0:
-                                metadata = results['metadatas'][0]
-                                if 'preprocessing_stats' not in metadata:
-                                    should_recreate = True
-                                    logger.info(f"🔄 Эмбеддинг для вакансии {job.job_id} будет пересоздан (без предобработки)")
-                                else:
-                                    logger.info(f"✅ Эмбеддинг для вакансии {job.job_id} уже создан с предобработкой")
-                            else:
-                                should_recreate = True
-                        except Exception as e:
-                            logger.warning(f"⚠️ Ошибка при проверке метаданных для вакансии {job.job_id}: {e}")
-                            should_recreate = True
-                    else:
-                        should_recreate = True
-                
-                if should_recreate:
-                    # Удаляем существующий эмбеддинг если есть
-                    existing_embedding = embedding_crud.get_by_source_id_and_type(
-                        db, str(job.job_id), 'job'
-                    )
-                    
-                    if existing_embedding:
-                        try:
-                            job_collection.delete(ids=[existing_embedding.chroma_document_id])
-                        except Exception as e:
-                            logger.warning(f"⚠️ Не удалось удалить эмбеддинг из ChromaDB: {e}")
-                        
-                        db.delete(existing_embedding)
-                    
-                    # Предобрабатываем текст
-                    processed_text, preprocessing_stats = preprocess_text_with_stats(
-                        job.description,
-                        config=None  # Используем стандартную конфигурацию для вакансий
-                    )
-                    
-                    logger.info(f"📄 Предобработка вакансии '{job.title}': "
-                              f"было {preprocessing_stats['original_length']} символов, "
-                              f"стало {preprocessing_stats['processed_length']} символов "
-                              f"(сжатие: {preprocessing_stats['compression_ratio']:.2%})")
-                    
-                    # Создаём эмбеддинг
-                    embedding_response = chroma_client.create_embedding(processed_text)
-                    
-                    if embedding_response and 'embedding' in embedding_response:
-                        chroma_doc_id = str(uuid.uuid4())
-                        
-                        # Метаданные с информацией о предобработке
-                        metadata = {
-                            'job_id': str(job.job_id),
-                            'job_title': job.title,
-                            'company_name': job.company.company_name if job.company else '',
-                            'preprocessing_stats': preprocessing_stats,
-                            'original_length': preprocessing_stats['original_length'],
-                            'processed_length': preprocessing_stats['processed_length'],
-                            'compression_ratio': preprocessing_stats['compression_ratio'],
-                            'created_with_preprocessing': True,
-                            'preprocessing_version': '1.0',
-                            'created_at': datetime.now().isoformat()
-                        }
-                        
-                        # Добавляем в ChromaDB
-                        job_collection.add(
-                            documents=[processed_text],
-                            embeddings=[embedding_response['embedding']],
-                            metadatas=[metadata],
-                            ids=[chroma_doc_id]
-                        )
-                        
-                        # Сохраняем в PostgreSQL
-                        embedding_crud.create(db, {
-                            'source_id': str(job.job_id),
-                            'source_type': 'job',
-                            'chroma_document_id': chroma_doc_id,
-                            'text_content': processed_text,
-                            'metadata': metadata
-                        })
-                        
-                        processed_jobs += 1
-                        logger.info(f"✅ Создан эмбеддинг для вакансии: {job.title}")
-                    else:
-                        errors += 1
-                        logger.error(f"❌ Не удалось создать эмбеддинг для вакансии {job.job_id}")
-                
-            except Exception as e:
-                errors += 1
-                logger.error(f"❌ Ошибка при обработке вакансии {job.job_id}: {str(e)}")
-                continue
-        
-        # Финальная фиксация изменений
-        db.commit()
-        
-        # Обновляем финальный прогресс
-        self.update_state(
-            state='SUCCESS',
-            meta={
-                'progress': 100,
-                'status': 'Завершено',
-                'processed_resumes': processed_resumes,
-                'processed_jobs': processed_jobs,
-                'errors': errors
-            }
-        )
-        
-        logger.info(f"✅ Пересоздание эмбеддингов завершено. "
-                   f"Обработано резюме: {processed_resumes}, вакансий: {processed_jobs}, ошибок: {errors}")
-        
-        return {
-            'status': 'completed',
-            'processed_resumes': processed_resumes,
-            'processed_jobs': processed_jobs,
-            'errors': errors,
-            'total_items': total_items
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка при пересоздании эмбеддингов: {str(e)}")
-        self.update_state(
-            state='FAILURE',
-            meta={
-                'error': str(e),
-                'status': 'Ошибка выполнения'
-            }
-        )
-        raise
-    finally:
-        db.close()
-
-
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.quick_recreate_embeddings')
-def quick_recreate_embeddings(self):
-    """
-    Быстрое пересоздание эмбеддингов - только те, которые созданы без предобработки
-    """
-    return recreate_all_embeddings_with_preprocessing.apply_async(args=[False]).get()
-
-
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.force_recreate_all_embeddings')
-def force_recreate_all_embeddings(self):
-    """
-    Принудительное пересоздание всех эмбеддингов с предобработкой
-    """
-    return recreate_all_embeddings_with_preprocessing.apply_async(args=[True]).get()
-
-
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.preprocess_resume_text_task')
-def preprocess_resume_text_task(self, submission_id: str):
-    """
-    Задача предобработки текста резюме
-    
-    Args:
-        submission_id: ID заявки
-    """
-    try:
-        session = database.get_session()
-        
-        try:
-            # Получаем заявку
-            submission = session.query(Submission).filter(
-                Submission.submission_id == submission_id
-            ).first()
-            
-            if not submission:
-                raise ValueError(f"Заявка {submission_id} не найдена")
-            
-            if not submission.resume_raw_text:
-                raise ValueError(f"У заявки {submission_id} нет текста резюме")
-            
-            # Предобрабатываем текст
-            original_text = str(submission.resume_raw_text)
-            processed_text = preprocess_resume_text(original_text)
-            
-            # Обновляем запись
-            session.query(Submission).filter(
-                Submission.submission_id == submission_id
-            ).update({
-                'resume_raw_text': processed_text,
-                'resume_parsed_at': datetime.utcnow()
-            })
-            
-            session.commit()
-            
-            logger.info(f"✅ Текст резюме для заявки {submission_id} предобработан")
-            
-            # Возвращаем информацию о процессе
-            return {
-                'submission_id': submission_id,
-                'status': 'completed',
-                'processed_length': len(processed_text),
-                'timestamp': datetime.utcnow().isoformat()
-            }
-            
-        finally:
-            session.close()
-            
-    except Exception as e:
-        logger.error(f"❌ Ошибка предобработки текста резюме {submission_id}: {e}")
-        self.retry(countdown=60, max_retries=3)
-
-
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.preprocess_job_text_task')
-def preprocess_job_text_task(self, job_id: int):
-    """
-    Задача предобработки текста вакансии
-    
-    Args:
-        job_id: ID вакансии
-    """
-    try:
-        session = database.get_session()
-        
-        try:
-            # Получаем вакансию
-            job = session.query(Job).filter(Job.job_id == job_id).first()
-            
-            if not job:
-                raise ValueError(f"Вакансия {job_id} не найдена")
-            
-            if not job.description:
-                raise ValueError(f"У вакансии {job_id} нет описания")
-            
-            # Предобрабатываем текст
-            original_text = str(job.description)
-            processed_text = preprocess_job_description_text(original_text)
-            
-            # Обновляем запись
-            session.query(Job).filter(Job.job_id == job_id).update({
-                'description': processed_text
-            })
-            
-            session.commit()
-            
-            logger.info(f"✅ Текст вакансии {job_id} предобработан")
-            
-            return {
-                'job_id': job_id,
-                'status': 'completed',
-                'processed_length': len(processed_text),
-                'timestamp': datetime.utcnow().isoformat()
-            }
-            
-        finally:
-            session.close()
-            
-    except Exception as e:
-        logger.error(f"❌ Ошибка предобработки текста вакансии {job_id}: {e}")
-        self.retry(countdown=60, max_retries=3)
-
-
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.clear_all_embeddings_task')
-def clear_all_embeddings_task(self):
-    """
-    Задача очистки всех эмбеддингов из ChromaDB
-    """
-    try:
-        # Очищаем коллекцию резюме
-        try:
-            chroma_client.client.delete_collection(name="resumes")
-            logger.info("✅ Коллекция резюме удалена")
-        except Exception as e:
-            logger.info(f"Коллекция резюме не существует или уже удалена: {e}")
-        
-        # Очищаем коллекцию вакансий
-        try:
-            chroma_client.client.delete_collection(name="job_descriptions")
-            logger.info("✅ Коллекция вакансий удалена")
-        except Exception as e:
-            logger.info(f"Коллекция вакансий не существует или уже удалена: {e}")
-        
-        # Создаем новые пустые коллекции
-        chroma_client.client.create_collection(name="resumes")
-        chroma_client.client.create_collection(name="job_descriptions")
-        
-        logger.info("✅ Все эмбеддинги очищены, созданы новые коллекции")
-        
-        return {
-            'status': 'completed',
-            'message': 'Все эмбеддинги очищены',
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка очистки эмбеддингов: {e}")
-        self.retry(countdown=60, max_retries=3)
-
-
-@get_celery_app().task(bind=True, name='tasks.embedding_tasks.recreate_all_embeddings_task')
-def recreate_all_embeddings_task(self):
-    """
-    Главная задача пересоздания всех эмбеддингов с предобработкой
-    
-    Выполняет следующие шаги:
-    1. Очищает все существующие эмбеддинги
-    2. Предобрабатывает все тексты
-    3. Создает новые эмбеддинги
-    """
-    try:
-        logger.info("🚀 Начинаем пересоздание всех эмбеддингов")
-        
-        # Шаг 1: Очищаем все эмбеддинги
-        logger.info("🧹 Очищаем существующие эмбеддинги...")
-        clear_result = clear_all_embeddings_task.apply()
-        logger.info(f"Результат очистки: {clear_result.get()}")
-        
-        # Шаг 2: Получаем все заявки и вакансии
-        session = database.get_session()
-        
-        try:
-            submissions = session.query(Submission).filter(
-                Submission.resume_raw_text.isnot(None)
-            ).all()
-            
-            jobs = session.query(Job).filter(
-                Job.description.isnot(None)
-            ).all()
-            
-            logger.info(f"📊 Найдено {len(submissions)} резюме и {len(jobs)} вакансий")
-            
-        finally:
-            session.close()
-        
-        # Шаг 3: Запускаем предобработку текстов
-        logger.info("🔄 Запускаем предобработку текстов...")
-        
-        # Предобрабатываем резюме
-        for submission in submissions:
-            preprocess_resume_text_task.delay(str(submission.submission_id))
-        
-        # Предобрабатываем вакансии
-        for job in jobs:
-            preprocess_job_text_task.delay(job.job_id)
-        
-        # Шаг 4: Ждем завершения предобработки и запускаем создание эмбеддингов
-        # Используем countdown для задержки, чтобы предобработка успела завершиться
-        logger.info("⏳ Ждем завершения предобработки...")
-        
-        # Запускаем создание эмбеддингов с задержкой
-        for submission in submissions:
-            generate_resume_embeddings.apply_async(
-                args=[[str(submission.submission_id)]],
-                countdown=60  # 60 секунд задержки
-            )
-        
-        for job in jobs:
-            generate_job_embeddings.apply_async(
-                args=[[job.job_id]],
-                countdown=60  # 60 секунд задержки
-            )
-        
-        logger.info("✅ Все задачи пересоздания эмбеддингов запущены")
-        
-        return {
-            'status': 'completed',
-            'resumes_count': len(submissions),
-            'jobs_count': len(jobs),
-            'message': 'Пересоздание эмбеддингов запущено',
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка пересоздания эмбеддингов: {e}")
-        self.retry(countdown=120, max_retries=2)
+    logger.info("🔄 Вызвана задача generate_all_embeddings (логическая точка в pipeline, без запуска вложенных задач)")
+    return {
+        'status': 'skipped',
+        'message': 'Генерация всех эмбеддингов теперь orchestrated на уровне workflow',
+        'timestamp': datetime.now().isoformat(),
+        'previous_results': previous_results
+    }

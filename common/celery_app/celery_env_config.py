@@ -4,7 +4,7 @@ Environment-specific configuration for Celery
 
 import os
 from typing import Dict, Any
-from .queue_names import EMBEDDINGS_GPU_QUEUE, SCORING_TASKS_QUEUE, DEFAULT_QUEUE, FILLOUT_QUEUE, SEARCH_BASIC_QUEUE
+from .queue_names import FILLOUT_PROCESSING_QUEUE, TEXT_PROCESSING_QUEUE, EMBEDDINGS_QUEUE, RERANKING_QUEUE, ORCHESTRATION_QUEUE
 
 
 def get_environment_config(environment: str | None = None) -> Dict[str, Any]:
@@ -60,60 +60,21 @@ def get_task_routes() -> Dict[str, Dict[str, str]]:
     
     # Базовые маршруты (всегда одинаковые)
     routes = {
-        # 🔄 Workflow задачи (ВКЛЮЧЕНЫ)
-        'tasks.workflows.process_resume_workflow': {'queue': DEFAULT_QUEUE},
-        'tasks.workflows.process_job_workflow': {'queue': DEFAULT_QUEUE},
-        'tasks.workflows.enhanced_resume_search_workflow': {'queue': DEFAULT_QUEUE},
-        'tasks.workflows.enhanced_job_search_workflow': {'queue': DEFAULT_QUEUE},
-        
-        # 📋 Fillout задачи (ВКЛЮЧЕНЫ)
-        'tasks.fillout_tasks.fetch_fillout_responses': {'queue': FILLOUT_QUEUE},
-        'tasks.fillout_tasks.process_fillout_response': {'queue': FILLOUT_QUEUE},
-        'tasks.fillout_tasks.process_fillout_batch': {'queue': FILLOUT_QUEUE},
-        
-        # 🔍 Поиск и сопоставление (ВКЛЮЧЕНЫ)
-        'tasks.matching.batch_find_matches_for_resumes': {'queue': SEARCH_BASIC_QUEUE},
-        'tasks.matching.batch_find_matches_for_jobs': {'queue': SEARCH_BASIC_QUEUE},
-        'tasks.matching.find_matching_resumes_for_job': {'queue': SEARCH_BASIC_QUEUE},
-        'tasks.matching.find_matching_jobs_for_resume': {'queue': SEARCH_BASIC_QUEUE},
-        
-        # 💾 Анализ задачи (сохранение результатов)
-        'tasks.analysis_tasks.save_reranker_analysis_results': {'queue': DEFAULT_QUEUE},
-        
-        # 📧 Интеграция и уведомления
-        'tasks.integration_tasks.*': {'queue': DEFAULT_QUEUE},
-        'tasks.notification_tasks.*': {'queue': DEFAULT_QUEUE},
+        # Workflow задачи (оркестрация)
+        'tasks.workflows.*': {'queue': ORCHESTRATION_QUEUE},
+
+        # Fillout задачи
+        'tasks.fillout_tasks.*': {'queue': FILLOUT_PROCESSING_QUEUE},
+
+        # Parsing задачи
+        'tasks.parsing_tasks.*': {'queue': TEXT_PROCESSING_QUEUE},
+
+        # Embedding задачи
+        'tasks.embedding_tasks.*': {'queue': EMBEDDINGS_QUEUE},
+
+        # Reranking задачи
+        'tasks.reranking_tasks.*': {'queue': RERANKING_QUEUE},
     }
-    
-    # Условная маршрутизация для GPU-задач
-    if gpu_enabled:
-        # GPU сервер настроен - направляем GPU задачи на специальные очереди
-        routes.update({
-            # 🧠 Embedding задачи (на GPU)
-            'tasks.embedding_tasks.generate_resume_embeddings': {'queue': EMBEDDINGS_GPU_QUEUE},
-            'tasks.embedding_tasks.generate_job_embeddings': {'queue': EMBEDDINGS_GPU_QUEUE},
-            'tasks.embedding_tasks.search_similar_resumes': {'queue': EMBEDDINGS_GPU_QUEUE},
-            'tasks.embedding_tasks.search_similar_jobs': {'queue': EMBEDDINGS_GPU_QUEUE},
-            'tasks.embedding_tasks.cleanup_embeddings': {'queue': EMBEDDINGS_GPU_QUEUE},
-            
-            # 🎯 Скоринг задачи (на GPU)
-            'tasks.scoring_tasks.rerank_resume_matches': {'queue': SCORING_TASKS_QUEUE},
-            'tasks.scoring_tasks.rerank_job_matches': {'queue': SCORING_TASKS_QUEUE},
-        })
-    else:
-        # GPU сервер НЕ настроен - выполняем GPU задачи на CPU
-        routes.update({
-            # 🧠 Embedding задачи (на CPU)
-            'tasks.embedding_tasks.generate_resume_embeddings': {'queue': DEFAULT_QUEUE},
-            'tasks.embedding_tasks.generate_job_embeddings': {'queue': DEFAULT_QUEUE},
-            'tasks.embedding_tasks.search_similar_resumes': {'queue': DEFAULT_QUEUE},
-            'tasks.embedding_tasks.search_similar_jobs': {'queue': DEFAULT_QUEUE},
-            'tasks.embedding_tasks.cleanup_embeddings': {'queue': DEFAULT_QUEUE},
-            
-            # 🎯 Скоринг задачи (на CPU)
-            'tasks.scoring_tasks.rerank_resume_matches': {'queue': DEFAULT_QUEUE},
-            'tasks.scoring_tasks.rerank_job_matches': {'queue': DEFAULT_QUEUE},
-        })
     
     return routes
 

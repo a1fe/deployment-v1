@@ -54,19 +54,54 @@ def worker_ready_handler(sender, **kwargs):
 
 @worker_process_init.connect
 def worker_process_init_handler(sender, **kwargs):
-    """Called when worker process starts"""
-    logger.info(f"🔧 Worker process {sender.hostname} initialized")
+    """Called when worker process starts - настройка для BGE Reranker совместимости"""
+    hostname = getattr(sender, 'hostname', 'unknown') if sender else 'unknown'
+    logger.info(f"🔧 Worker process {hostname} initialized")
+    
+    # Специальные настройки для PyTorch/transformers в multiprocessing
+    import os
+    import multiprocessing
+    
+    logger.info(f"🔧 Настройка окружения для BGE Reranker в процессе {os.getpid()}")
+    
+    # Устанавливаем переменные окружения для стабильности
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['MKL_NUM_THREADS'] = '1'
+    os.environ['NUMEXPR_NUM_THREADS'] = '1'
+    os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+    os.environ['OPENBLAS_NUM_THREADS'] = '1'
+    os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
+    
+    # Устанавливаем multiprocessing method для spawn (если возможно)
+    try:
+        if hasattr(multiprocessing, 'set_start_method'):
+            current_method = multiprocessing.get_start_method(allow_none=True)
+            logger.info(f"🔧 Текущий multiprocessing method: {current_method}")
+            
+            # Для macOS стараемся использовать spawn
+            if current_method != 'spawn':
+                try:
+                    multiprocessing.set_start_method('spawn', force=True)
+                    logger.info("✅ Установлен multiprocessing method: spawn")
+                except RuntimeError as e:
+                    logger.warning(f"⚠️ Не удалось установить spawn method: {e}")
+        
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка настройки multiprocessing: {e}")
+    
+    logger.info(f"✅ Worker process {hostname} настроен для BGE Reranker")
 
 
 @worker_shutting_down.connect  
 def worker_shutting_down_handler(sender, **kwargs):
     """Called when worker is shutting down"""
-    worker_name = sender.hostname
-    logger.info(f"🛑 Worker {worker_name} is shutting down gracefully")
+    hostname = getattr(sender, 'hostname', 'unknown') if sender else 'unknown'
+    logger.info(f"🛑 Worker {hostname} is shutting down gracefully")
     logger.info(f"📊 Final metrics: {task_metrics}")
     
     if MONITORING_ENABLED and monitor:
-        monitor.update_worker_status(worker_name, 'offline')
+        monitor.update_worker_status(hostname, 'offline')
 
 
 @before_task_publish.connect

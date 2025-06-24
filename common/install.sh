@@ -154,18 +154,8 @@ setup_postgresql() {
             ;;
     esac
     
-    # Создание пользователя и базы данных
-    log_info "Creating PostgreSQL user and database..."
-    
-    if [[ $OS == "macos" ]]; then
-        PSQL_USER=$(whoami)
-        createuser -s hr_user 2>/dev/null || true
-        createdb hr_analysis 2>/dev/null || true
-    else
-        $SUDO -u postgres createuser -s hr_user 2>/dev/null || true
-        $SUDO -u postgres createdb hr_analysis 2>/dev/null || true
-    fi
-    
+    log_info "PostgreSQL service started"
+    log_info "Database initialization will be handled by deployment scripts"
     log_success "PostgreSQL configured"
 }
 

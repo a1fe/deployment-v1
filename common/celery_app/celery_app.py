@@ -6,68 +6,103 @@ This module provides access to the configured Celery application instance.
 
 import logging
 import os
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from celery import Celery
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Lazy import to avoid circular dependencies
-_celery_app = None
+# Создаем Celery app здесь, чтобы избежать циклических импортов
+from celery import Celery
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
+
+# Get Redis configuration
+redis_host = os.getenv('REDIS_HOST', 'localhost')
+redis_port = os.getenv('REDIS_PORT', '6379')  
+redis_db = os.getenv('REDIS_DB', '0')
+redis_password = os.getenv('REDIS_PASSWORD', '')
+
+# Build Redis URL
+if redis_password:
+    redis_url = f"redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}"
+else:
+    redis_url = f"redis://{redis_host}:{redis_port}/{redis_db}"
+
+# Create Celery instance
+celery_app = Celery('hr_system')
+
+# Configure Celery
+celery_app.conf.update(
+    broker_url=redis_url,
+    result_backend=redis_url,
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='Europe/Moscow',
+    enable_utc=True,
+    broker_connection_retry_on_startup=True,
+    task_track_started=True,
+    task_reject_on_worker_lost=True,
+    worker_prefetch_multiplier=1,
+    task_acks_late=True,
+    worker_disable_rate_limits=True,
+)
+
+# Import динамической конфигурации
+from .celery_env_config import get_task_routes, get_beat_schedule
+
+# Применяем дополнительную конфигурацию
+celery_app.conf.update(
+    # Beat schedule - автоматический пайплайн  
+    beat_schedule=get_beat_schedule(),
+    
+    # Task routing - техническая архитектура очередей
+    task_routes=get_task_routes(),
+    
+    # Include task modules
+    include=[
+        'tasks.fillout_tasks',
+        'tasks.parsing_tasks',
+        'tasks.embedding_tasks',
+        'tasks.reranking_tasks',
+        'tasks.workflows'
+    ]
+)
+
+# Export the app for compatibility
+app = celery_app
 
 def get_celery_app():
     """Get the configured Celery application instance"""
-    global _celery_app
-    if _celery_app is None:
-        # Validate Redis security at startup
-        try:
-            from celery_app.redis_manager import validate_redis_security
-            validate_redis_security()
-            logger.info("✅ Redis security validation passed")
-        except Exception as e:
-            logger.error(f"❌ Redis security validation failed: {e}")
-            raise SystemExit(f"Security validation failed: {e}")
-        
-        from celery_app.celery_config import celery_app as _imported_app
-        _celery_app = _imported_app
-        
-        # Import signals to register them
-        import celery_app.celery_signals
-        
-        # Start monitoring if enabled via env var
-        if os.getenv('CELERY_ENABLE_MONITORING', '').lower() in ('true', '1', 'yes'):
-            try:
-                from celery_app.monitoring import monitor
-                monitor.start_monitoring()
-                logger.info("Automatic Celery monitoring enabled")
-            except Exception as e:
-                logger.error(f"Failed to start monitoring: {e}")
-        
-    return _celery_app
+    return celery_app
 
+# Import tasks to register them (after app is defined to avoid circular imports)
+try:
+    from tasks import fillout_tasks, parsing_tasks, embedding_tasks, reranking_tasks, workflows
+    logger.info("✅ All task modules imported successfully")
+except Exception as e:
+    logger.error(f"❌ Error importing task modules: {e}")
 
-# Export the app instance getter
-app = get_celery_app
+# Export the app instance for Celery CLI
+# app is already imported above
 
 
 def run_test_tasks():
     """Run test tasks to verify system functionality"""
     try:
         # Import our tasks
-        from tasks.fillout_tasks import pull_fillout_data, parse_documents
+        from tasks.fillout_tasks import fetch_resume_data
         
         logger.info("Testing task discovery...")
         
-        # Test task registration using the app variable (which is celery_app)
-        required_tasks = ['fillout.pull_fillout_data', 'documents.parse_documents']
+        # Test task registration using the celery_app variable
+        required_tasks = ['tasks.fillout_tasks.fetch_resume_data']
         missing_tasks = []
         
         for task_name in required_tasks:
-            if task_name in app.tasks:
+            if task_name in celery_app.tasks:
                 logger.info(f"✅ {task_name} task discovered")
             else:
                 logger.error(f"❌ {task_name} task not found")
@@ -77,8 +112,8 @@ def run_test_tasks():
             raise RuntimeError(f"❌ Задачи не зарегистрированы в Celery: {missing_tasks}")
             
         # Run a simple test task only if all tasks are registered
-        logger.info("🧪 Testing pull_fillout_data task...")
-        result = pull_fillout_data.delay()
+        logger.info("🧪 Testing fetch_resume_data task...")
+        result = fetch_resume_data.delay()
         logger.info(f"✅ Task submitted with ID: {result.id}")
         
         return "Test tasks completed successfully"
@@ -90,5 +125,5 @@ def run_test_tasks():
 
 if __name__ == '__main__':
     print("Celery app configured successfully")
-    print(f"Broker: {app.conf.broker_url}")
-    print(f"Tasks: {list(app.tasks.keys())}")
+    print(f"Broker: {celery_app.conf.broker_url}")
+    print(f"Tasks: {list(celery_app.tasks.keys())}")

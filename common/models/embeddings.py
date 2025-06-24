@@ -5,6 +5,8 @@
 from sqlalchemy import JSON, UniqueConstraint
 from .base import *
 
+print("Импортируется файл:", __file__)
+
 class EmbeddingMetadata(Base):
     """Модель для хранения метаданных эмбеддингов"""
     __tablename__ = 'embedding_metadata'

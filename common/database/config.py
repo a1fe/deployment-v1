@@ -28,8 +28,8 @@ class DatabaseConfig:
             # Собираем URL из отдельных параметров
             self.DB_HOST = os.getenv('DB_HOST', 'localhost')
             self.DB_PORT = os.getenv('DB_PORT', '5432')
-            self.DB_NAME = os.getenv('DB_NAME', 'hr_analysis_db')
-            self.DB_USER = os.getenv('DB_USER', 'hr_analysis_user')
+            self.DB_NAME = os.getenv('DB_NAME', 'hr_test')
+            self.DB_USER = os.getenv('DB_USER', 'test_user')
             self.DB_PASSWORD = os.getenv('DB_PASSWORD', '')
             
             # Формируем URL подключения
@@ -49,6 +49,14 @@ class DatabaseConfig:
     
     def _get_ssl_config(self) -> dict:
         """Получение SSL конфигурации в зависимости от окружения"""
+        
+        # Принудительно отключаем SSL для development и localhost
+        if (self.environment == 'development' or 
+            'localhost' in self.DATABASE_URL or 
+            '127.0.0.1' in self.DATABASE_URL):
+            print(f"🔓 SSL отключен для development окружения")
+            return {'sslmode': 'disable'}
+        
         if self.environment == 'production':
             ssl_mode = os.getenv('DB_SSL_MODE', 'require')
             ssl_config = {'sslmode': ssl_mode}
@@ -64,9 +72,9 @@ class DatabaseConfig:
             print(f"🔒 SSL включен для production: {ssl_mode}")
             return ssl_config
         else:
-            # Для development/localhost SSL не требуется
+            # Для любых других окружений - тоже отключаем SSL
             print(f"🔓 SSL отключен для {self.environment} окружения")
-            return {}
+            return {'sslmode': 'disable'}
 
 
 class Database:

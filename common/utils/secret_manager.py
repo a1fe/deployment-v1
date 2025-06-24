@@ -100,8 +100,8 @@ class SecretManager:
             config.update({
                 'DB_HOST': self.get_secret('DB_HOST', 'localhost'),
                 'DB_PORT': self.get_secret('DB_PORT', '5432'),
-                'DB_NAME': self.get_secret('DB_NAME', 'hr_analysis_db'),
-                'DB_USER': self.get_secret('DB_USER', 'hr_analysis_user'),
+                'DB_NAME': self.get_secret('DB_NAME', 'hr_test'),
+                'DB_USER': self.get_secret('DB_USER', 'test_user'),
                 'DB_PASSWORD': self.get_secret('DB_PASSWORD', ''),
             })
             

@@ -14,8 +14,8 @@ class Education(Base):
     
     education_id = Column(Integer, primary_key=True, autoincrement=True)
     submission_id = Column(UUID(as_uuid=True), ForeignKey('submissions.submission_id', ondelete='CASCADE'), nullable=False)
-    degree_level = Column(String(100), nullable=False)
-    field_of_study = Column(String(100), nullable=False)
+    degree_level = Column(String(255), nullable=False)  # Увеличено до 255
+    field_of_study = Column(String(500), nullable=False)  # Увеличено до 500 для длинных значений
     other_degree_level = Column(Text)  # Для случая когда degree_level = "Other"
     other_field_of_study = Column(Text)  # Для случая когда field_of_study = "Other"
     
@@ -27,6 +27,7 @@ class Education(Base):
     
     # Отношения
     submission = relationship("Submission", back_populates="educations")
+    fields = relationship("EducationField", back_populates="education", cascade="all, delete-orphan")
     
     def __repr__(self) -> str:
         degree_val = getattr(self, 'degree_level', 'Unknown')
