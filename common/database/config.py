@@ -8,7 +8,18 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import sys
 sys.path.append('..')
-from models.base import Base
+from ..models.base import Base
+
+# Импортируем все модели для создания таблиц
+from ..models.dictionaries import Industry, Competency, Role, Location
+from ..models.candidates import Candidate, Submission
+from ..models.candidates.address import Address
+from ..models.candidates.education import Education
+from ..models.candidates.education_field import EducationField
+from ..models.candidates.salary_expectation import SalaryExpectation
+from ..models.companies import Company, CompanyContact, Job
+from ..models.embeddings import EmbeddingMetadata
+from ..models.analysis_results import RerankerAnalysisResult, RerankerAnalysisSession
 
 # Загружаем переменные окружения
 load_dotenv()

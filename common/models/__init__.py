@@ -13,9 +13,6 @@ from .utils import (
 # Справочники (сохраняем обратную совместимость)
 from .dictionaries import Industry, Competency, Role, Location
 
-# Эмбеддинги (сохраняем обратную совместимость)
-from .embeddings import EmbeddingMetadata
-
 __all__ = [
     # Базовые
     'Base',
@@ -32,8 +29,5 @@ __all__ = [
     'Industry',
     'Competency', 
     'Role',
-    'Location',
-    
-    # Эмбеддинги
-    'EmbeddingMetadata'
+    'Location'
 ]

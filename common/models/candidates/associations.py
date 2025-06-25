@@ -3,7 +3,7 @@
 """
 
 from sqlalchemy import Table, Column, Integer, ForeignKey, UUID
-from models.base import Base
+from ..base import Base
 
 # Связующие таблицы для many-to-many отношений
 submission_competencies = Table(

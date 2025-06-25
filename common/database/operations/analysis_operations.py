@@ -11,9 +11,9 @@ from sqlalchemy import desc, asc, and_, or_, func
 from uuid import UUID
 
 from .base_crud import BaseCRUD
-from models.analysis_results import RerankerAnalysisResult, RerankerAnalysisSession
-from database.operations.candidate_operations import SubmissionCRUD
-from database.operations.company_operations import JobCRUD
+from common.models.analysis_results import RerankerAnalysisResult, RerankerAnalysisSession
+from common.database.operations.candidate_operations import SubmissionCRUD
+from common.database.operations.company_operations import JobCRUD
 
 
 class RerankerAnalysisResultCRUD(BaseCRUD):

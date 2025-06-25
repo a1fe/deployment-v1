@@ -6,7 +6,7 @@
 from typing import Optional, Dict, Any, List
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, UUID, Boolean
 from sqlalchemy.orm import relationship
-from models.base import Base
+from ..base import Base
 
 
 class EducationField(Base):

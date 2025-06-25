@@ -12,11 +12,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 def initialize_base_dictionaries():
     """Инициализация базовых справочников"""
     try:
-        from database.config import database
+        from common.database.config import database
         
         # Проверяем, есть ли модели справочников
         try:
-            from models.dictionaries import Industry, Competency, Role, Location
+            from common.models.dictionaries import Industry, Competency, Role, Location
             models_available = True
         except ImportError:
             print("⚠️ Модели справочников не найдены, пропускаем инициализацию")

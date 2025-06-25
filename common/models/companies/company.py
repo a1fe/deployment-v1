@@ -6,8 +6,8 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from models.base import Base
-from models.utils import TimestampMixin, ModelConstraints
+from ..base import Base
+from ..utils import TimestampMixin, ModelConstraints
 
 
 class Company(Base, TimestampMixin):

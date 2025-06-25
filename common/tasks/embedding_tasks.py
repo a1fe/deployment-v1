@@ -9,28 +9,27 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 import traceback
 
-# Добавляем корневую папку в путь
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from celery import current_task, shared_task
 from celery.utils.log import get_task_logger
-from database.config import database
-from database.operations.embedding_operations import embedding_crud
-from database.operations.candidate_operations import SubmissionCRUD
-from database.operations.company_operations import JobCRUD
-from models.candidates import Submission
-from models.companies import Job
-from models.embeddings import EmbeddingMetadata
-from utils.chroma_config import chroma_client, ChromaConfig
-from utils.text_preprocessing import preprocess_resume_text, preprocess_job_description_text, preprocess_text_with_stats
+
+# Абсолютные импорты для избежания проблем с путями
+from common.database.config import database
+from common.database.operations.embedding_operations import embedding_crud
+from common.database.operations.candidate_operations import SubmissionCRUD
+from common.database.operations.company_operations import JobCRUD
+from common.models.candidates import Submission
+from common.models.companies import Job
+from common.models.embeddings import EmbeddingMetadata
+from common.utils.chroma_config import chroma_client, ChromaConfig
+from common.utils.text_preprocessing import preprocess_resume_text, preprocess_job_description_text, preprocess_text_with_stats
 
 # Импортируем Celery app напрямую
-from celery_app.celery_app import celery_app
+from common.celery_app.celery_app import celery_app
 
 logger = get_task_logger(__name__)
 
 
-@celery_app.task(bind=True, name='tasks.embedding_tasks.generate_resume_embeddings')
+@celery_app.task(bind=True, name='common.tasks.embedding_tasks.generate_resume_embeddings')
 def generate_resume_embeddings(self, submission_ids: Optional[List[str]] = None):
     """
     Генерация эмбеддингов для резюме кандидатов
@@ -218,7 +217,7 @@ def generate_resume_embeddings(self, submission_ids: Optional[List[str]] = None)
         db.close()
 
 
-@celery_app.task(bind=True, name='tasks.embedding_tasks.generate_job_embeddings')
+@celery_app.task(bind=True, name='common.tasks.embedding_tasks.generate_job_embeddings')
 def generate_job_embeddings(self, job_ids: Optional[List[int]] = None):
     """
     Генерация эмбеддингов для описаний вакансий
@@ -415,7 +414,7 @@ def generate_job_embeddings(self, job_ids: Optional[List[int]] = None):
         db.close()
 
 
-@celery_app.task(bind=True, name='tasks.embedding_tasks.search_similar_resumes')
+@celery_app.task(bind=True, name='common.tasks.embedding_tasks.search_similar_resumes')
 def search_similar_resumes(self, query_text: str, limit: int = 10, min_similarity: float = 0.7):
     """
     Поиск похожих резюме по текстовому запросу
@@ -480,7 +479,7 @@ def search_similar_resumes(self, query_text: str, limit: int = 10, min_similarit
         db.close()
 
 
-@celery_app.task(bind=True, name='tasks.embedding_tasks.search_similar_jobs')
+@celery_app.task(bind=True, name='common.tasks.embedding_tasks.search_similar_jobs')
 def search_similar_jobs(self, query_text: str, limit: int = 10, min_similarity: float = 0.7):
     """
     Поиск похожих вакансий по текстовому запросу
@@ -549,7 +548,7 @@ def search_similar_jobs(self, query_text: str, limit: int = 10, min_similarity: 
         db.close()
 
 
-@celery_app.task(bind=True, name='tasks.embedding_tasks.generate_all_embeddings')
+@celery_app.task(bind=True, name='common.tasks.embedding_tasks.generate_all_embeddings')
 def generate_all_embeddings(self, previous_results=None) -> Dict[str, Any]:
     """
     Генерация всех эмбеддингов: резюме и вакансий

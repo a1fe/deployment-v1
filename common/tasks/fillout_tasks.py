@@ -14,14 +14,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from uuid import UUID
 
-from celery_app.celery_app import celery_app
-from database.config import database
-from models.candidates import (
+from common.celery_app.celery_app import celery_app
+from common.database.config import database
+from common.models.candidates import (
     Submission, Candidate, Address, Education, SalaryExpectation,
     submission_competencies, submission_roles, submission_industries, submission_locations
 )
-from models.companies import Company, CompanyContact, Job
-from models.dictionaries import Competency, Role, Industry, Location
+from common.models.companies import Company, CompanyContact, Job
+from common.models.dictionaries import Competency, Role, Industry, Location
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -82,7 +82,7 @@ COMPANY_FIELD_MAPPING = {
 
 @celery_app.task(
     bind=True,
-    name='tasks.fillout_tasks.fetch_resume_data',
+    name='common.tasks.fillout_tasks.fetch_resume_data',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2
@@ -598,7 +598,7 @@ def _link_locations(db: Session, submission_id: Any, location_names: List[str]):
 
 @celery_app.task(
     bind=True,
-    name='tasks.fillout_tasks.fetch_company_data',
+    name='common.tasks.fillout_tasks.fetch_company_data',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2

@@ -13,19 +13,19 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from celery.signals import worker_process_init
 
-from celery_app.celery_app import celery_app
-from database.config import database
-from database.operations.analysis_operations import RerankerAnalysisResultCRUD
-from database.operations.embedding_operations import embedding_crud
-from database.operations.candidate_operations import SubmissionCRUD
-from database.operations.company_operations import JobCRUD
-from celery_app.queue_names import RERANKING_QUEUE
+from common.celery_app.celery_app import celery_app
+from common.database.config import database
+from common.database.operations.analysis_operations import RerankerAnalysisResultCRUD
+from common.database.operations.embedding_operations import embedding_crud
+from common.database.operations.candidate_operations import SubmissionCRUD
+from common.database.operations.company_operations import JobCRUD
+from common.celery_app.queue_names import RERANKING_QUEUE
 
-from models.candidates import Submission
-from models.companies import Job
-from models.analysis_results import RerankerAnalysisResult
-from utils.chroma_config import chroma_client, ChromaConfig
-from utils.reranker_config import get_reranker_client
+from common.models.candidates import Submission
+from common.models.companies import Job
+from common.models.analysis_results import RerankerAnalysisResult
+from common.utils.chroma_config import chroma_client, ChromaConfig
+from common.utils.reranker_config import get_reranker_client
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -40,7 +40,7 @@ job_crud = JobCRUD()
 
 @celery_app.task(
     bind=True,
-    name='tasks.reranking_tasks.rerank_resumes_for_job',
+    name='common.tasks.reranking_tasks.rerank_resumes_for_job',
     soft_time_limit=600,
     time_limit=720,
     max_retries=3
@@ -308,7 +308,7 @@ def rerank_resumes_for_job(self, job_id: int, top_k: int = 50) -> Dict[str, Any]
 
 @celery_app.task(
     bind=True,
-    name='tasks.reranking_tasks.rerank_jobs_for_resume',
+    name='common.tasks.reranking_tasks.rerank_jobs_for_resume',
     soft_time_limit=600,
     time_limit=720,
     max_retries=3

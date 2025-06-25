@@ -67,6 +67,27 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 export ENVIRONMENT="development"  # Используем development для тестирования
 log_message "🔧 Переменные окружения настроены"
 
+# ДИАГНОСТИКА: Проверяем импорт задач перед запуском воркеров
+log_message "🔍 ДИАГНОСТИКА: Проверка импорта задач..."
+python -c "
+import sys
+sys.path.append('.')
+from celery_app.celery_app import celery_app
+print(f'=== DIAG: PYTHONPATH={sys.path[:3]}')
+print(f'=== DIAG: PWD=$(pwd)')
+print(f'=== DIAG: Registered tasks: {len(celery_app.tasks)}')
+custom_tasks = [t for t in celery_app.tasks.keys() if t.startswith('common.tasks')]
+print(f'=== DIAG: Custom tasks: {len(custom_tasks)}')
+if len(custom_tasks) == 0:
+    print('❌ CRITICAL: No custom tasks registered!')
+    exit(1)
+else:
+    print('✅ Custom tasks found:', custom_tasks[:3])
+" || {
+    log_message "❌ КРИТИЧЕСКАЯ ОШИБКА: Задачи не импортируются!"
+    exit 1
+}
+
 # ИСПРАВЛЕНИЕ: Проверка состояния воркеров
 check_worker_status() {
     local queue=$1

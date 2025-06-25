@@ -51,7 +51,11 @@ celery_app.conf.update(
 )
 
 # Import динамической конфигурации
-from .celery_env_config import get_task_routes, get_beat_schedule
+try:
+    from .celery_env_config import get_task_routes, get_beat_schedule
+except ImportError:
+    # Fallback для запуска как скрипта
+    from celery_env_config import get_task_routes, get_beat_schedule
 
 # Применяем дополнительную конфигурацию
 celery_app.conf.update(
@@ -61,13 +65,13 @@ celery_app.conf.update(
     # Task routing - техническая архитектура очередей
     task_routes=get_task_routes(),
     
-    # Include task modules
+    # Include task modules (используем абсолютные пути)
     include=[
-        'tasks.fillout_tasks',
-        'tasks.parsing_tasks',
-        'tasks.embedding_tasks',
-        'tasks.reranking_tasks',
-        'tasks.workflows'
+        'common.tasks.fillout_tasks',
+        'common.tasks.parsing_tasks', 
+        'common.tasks.embedding_tasks',
+        'common.tasks.reranking_tasks',
+        'common.tasks.workflows'
     ]
 )
 
@@ -80,10 +84,21 @@ def get_celery_app():
 
 # Import tasks to register them (after app is defined to avoid circular imports)
 try:
-    from tasks import fillout_tasks, parsing_tasks, embedding_tasks, reranking_tasks, workflows
+    # Используем абсолютные импорты для избежания ошибок
+    import sys
+    import os
+    
+    # Добавляем путь к корню проекта в sys.path если его нет
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    
+    # Импортируем модули задач с абсолютными путями
+    from common.tasks import fillout_tasks, parsing_tasks, embedding_tasks, reranking_tasks, workflows
     logger.info("✅ All task modules imported successfully")
 except Exception as e:
     logger.error(f"❌ Error importing task modules: {e}")
+    logger.error(f"Current sys.path: {sys.path[:3]}...")  # Показываем первые 3 пути для отладки
 
 # Export the app instance for Celery CLI
 # app is already imported above
@@ -92,13 +107,13 @@ except Exception as e:
 def run_test_tasks():
     """Run test tasks to verify system functionality"""
     try:
-        # Import our tasks
-        from tasks.fillout_tasks import fetch_resume_data
+        # Import our tasks with absolute path
+        from common.tasks.fillout_tasks import fetch_resume_data
         
         logger.info("Testing task discovery...")
         
         # Test task registration using the celery_app variable
-        required_tasks = ['tasks.fillout_tasks.fetch_resume_data']
+        required_tasks = ['common.tasks.fillout_tasks.fetch_resume_data']
         missing_tasks = []
         
         for task_name in required_tasks:

@@ -2,20 +2,36 @@
 
 import sys
 import logging
-print("sys.path:", sys.path)
-try:
-    import common.models.candidates as cmc
-    print("Submission id:", id(cmc.Submission))
-except Exception as e:
-    print("Submission import error:", e)
 
-from database.config import database
-from database.operations.candidate_operations import SubmissionCRUD
-from database.operations.company_operations import JobCRUD
-from database.operations.embedding_operations import embedding_crud
-from database.operations.analysis_operations import RerankerAnalysisResultCRUD
-from common.models.candidates import Submission
+# Импортируем все необходимые модели для избежания ошибок SQLAlchemy
+from common.models.base import Base
+from common.models.dictionaries import Industry, Competency, Role, Location
+from common.models.companies import Company, Job, JobCompetency, CompanyIndustry
+from common.models.embeddings import EmbeddingMetadata
 from common.models.analysis_results import RerankerAnalysisResult
+
+from common.database.config import database
+
+# Пробуем импортировать operations с обработкой ошибок
+try:
+    from common.database.operations.candidate_operations import SubmissionCRUD
+    from common.database.operations.company_operations import JobCRUD
+    from common.database.operations.analysis_operations import RerankerAnalysisResultCRUD
+    operations_available = True
+except ImportError as e:
+    print(f"Предупреждение: Ошибка импорта operations: {e}")
+    print("Создаем заглушки для CRUD операций...")
+    operations_available = False
+    
+    class SubmissionCRUD:
+        def get_by_id(self, db, id): return None
+    
+    class JobCRUD:
+        def get_by_id(self, db, id): return None
+    
+    class RerankerAnalysisResultCRUD:
+        pass
+
 from common.utils.chroma_config import chroma_client, ChromaConfig
 from common.utils.reranker_config import get_reranker_client
 from uuid import UUID
@@ -190,6 +206,7 @@ def rerank_resumes_for_job(job_id: int, top_k: int = 50):
         db.close()
 
 def rerank_all_resumes_to_jobs(top_k: int = 50):
+    from common.models.candidates import Submission  # Локальный импорт
     db = database.get_session()
     try:
         submissions = db.query(Submission).filter(

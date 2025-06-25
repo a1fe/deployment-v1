@@ -12,10 +12,10 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from celery_app.celery_app import celery_app
-from database.config import database
-from models.candidates import Submission
-from models.companies import Job
+from common.celery_app.celery_app import celery_app
+from common.database.config import database
+from common.models.candidates import Submission
+from common.models.companies import Job
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -25,7 +25,7 @@ logger = get_task_logger(__name__)
 
 @celery_app.task(
     bind=True,
-    name='tasks.parsing_tasks.parse_resume_text',
+    name='common.tasks.parsing_tasks.parse_resume_text',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2
@@ -116,7 +116,7 @@ def parse_resume_text(self, previous_results=None) -> Dict[str, Any]:
 
 @celery_app.task(
     bind=True,
-    name='tasks.parsing_tasks.parse_job_text',
+    name='common.tasks.parsing_tasks.parse_job_text',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2

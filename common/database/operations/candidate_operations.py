@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 
 from .base_crud import BaseCRUD
-from models.candidates import (
+from common.models.candidates import (
     Candidate, Submission, SalaryExpectation, Address, Education
 )
-from models.dictionaries import (
+from common.models.dictionaries import (
     Competency, Role, Industry, Location
 )
 

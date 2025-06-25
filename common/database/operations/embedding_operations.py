@@ -7,8 +7,8 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from database.operations.base_crud import BaseCRUD
-from models.embeddings import EmbeddingMetadata
+from .base_crud import BaseCRUD
+from common.models.embeddings import EmbeddingMetadata
 
 
 class EmbeddingCRUD(BaseCRUD):

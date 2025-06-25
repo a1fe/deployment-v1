@@ -4,7 +4,13 @@ Environment-specific configuration for Celery
 
 import os
 from typing import Dict, Any
-from .queue_names import FILLOUT_PROCESSING_QUEUE, TEXT_PROCESSING_QUEUE, EMBEDDINGS_QUEUE, RERANKING_QUEUE, ORCHESTRATION_QUEUE
+from .queue_names import (
+    FILLOUT_PROCESSING_QUEUE, 
+    TEXT_PROCESSING_QUEUE, 
+    EMBEDDINGS_QUEUE, 
+    RERANKING_QUEUE, 
+    ORCHESTRATION_QUEUE
+)
 
 
 def get_environment_config(environment: str | None = None) -> Dict[str, Any]:
@@ -43,37 +49,43 @@ def get_environment_config(environment: str | None = None) -> Dict[str, Any]:
 
 def get_task_routes() -> Dict[str, Dict[str, str]]:
     """
-    Get task routing configuration with conditional GPU support.
+    Get task routing configuration using the new business queue architecture.
     
-    Если GPU_INSTANCE_NAME настроен - GPU задачи идут на GPU-очереди
-    Если нет - GPU задачи выполняются на CPU-очередях
-    
-    ✅ АКТИВНЫЕ МАРШРУТЫ (используются в основных workflow):
-    - Основные цепочки workflow
-    - Задачи Fillout (получение данных)
-    - Задачи генерации эмбеддингов (условно GPU/CPU)
-    - Задачи поиска (matching)
-    - Задачи скоринга (reranking, условно GPU/CPU)
-    - Задачи анализа (сохранение результатов)
+    Новая архитектура очередей:
+    - fillout_processing: Получение данных из внешних источников
+    - text_processing: Обработка и парсинг текстов
+    - embeddings: Генерация эмбеддингов
+    - reranking: AI-реранжирование результатов
+    - orchestration: Управление workflow и координация задач
     """
-    gpu_enabled = bool(os.environ.get('GPU_INSTANCE_NAME'))
     
-    # Базовые маршруты (всегда одинаковые)
+    # Маршрутизация задач по бизнес-логике
     routes = {
-        # Workflow задачи (оркестрация)
-        'tasks.workflows.*': {'queue': ORCHESTRATION_QUEUE},
-
-        # Fillout задачи
-        'tasks.fillout_tasks.*': {'queue': FILLOUT_PROCESSING_QUEUE},
-
-        # Parsing задачи
-        'tasks.parsing_tasks.*': {'queue': TEXT_PROCESSING_QUEUE},
-
-        # Embedding задачи
-        'tasks.embedding_tasks.*': {'queue': EMBEDDINGS_QUEUE},
-
-        # Reranking задачи
-        'tasks.reranking_tasks.*': {'queue': RERANKING_QUEUE},
+        # 🔄 Workflow задачи (orchestration)
+        'common.tasks.workflows.run_full_processing_pipeline': {'queue': ORCHESTRATION_QUEUE},
+        'common.tasks.workflows.run_parsing_only': {'queue': ORCHESTRATION_QUEUE},
+        'common.tasks.workflows.run_embeddings_only': {'queue': ORCHESTRATION_QUEUE},
+        'common.tasks.workflows.run_reranking_only': {'queue': ORCHESTRATION_QUEUE},
+        'common.tasks.workflows.launch_reranking_tasks': {'queue': ORCHESTRATION_QUEUE},
+        
+        # 📋 Fillout задачи (fillout_processing)
+        'common.tasks.fillout_tasks.fetch_resume_data': {'queue': FILLOUT_PROCESSING_QUEUE},
+        'common.tasks.fillout_tasks.fetch_company_data': {'queue': FILLOUT_PROCESSING_QUEUE},
+        
+        # � Парсинг задачи (text_processing)
+        'common.tasks.parsing_tasks.parse_resume_text': {'queue': TEXT_PROCESSING_QUEUE},
+        'common.tasks.parsing_tasks.parse_job_text': {'queue': TEXT_PROCESSING_QUEUE},
+        
+        # 🧠 Embedding задачи (embeddings)
+        'common.tasks.embedding_tasks.generate_resume_embeddings': {'queue': EMBEDDINGS_QUEUE},
+        'common.tasks.embedding_tasks.generate_job_embeddings': {'queue': EMBEDDINGS_QUEUE},
+        'common.tasks.embedding_tasks.search_similar_resumes': {'queue': EMBEDDINGS_QUEUE},
+        'common.tasks.embedding_tasks.search_similar_jobs': {'queue': EMBEDDINGS_QUEUE},
+        'common.tasks.embedding_tasks.generate_all_embeddings': {'queue': EMBEDDINGS_QUEUE},
+        
+        # 🎯 Reranking задачи (reranking)
+        'common.tasks.reranking_tasks.rerank_jobs_for_resume': {'queue': RERANKING_QUEUE},
+        'common.tasks.reranking_tasks.rerank_resumes_for_job': {'queue': RERANKING_QUEUE},
     }
     
     return routes
@@ -81,17 +93,12 @@ def get_task_routes() -> Dict[str, Dict[str, str]]:
 
 def get_worker_configs() -> Dict[str, Dict[str, Any]]:
     """
-    Конфигурация для каждого типа воркера с условной поддержкой GPU.
-    
-    Если GPU_INSTANCE_NAME настроен - создаем конфигурации для GPU воркеров
-    Если нет - все задачи выполняются на CPU воркерах
+    Конфигурация для каждого типа воркера с новой бизнес-архитектурой очередей.
     """
-    gpu_enabled = bool(os.environ.get('GPU_INSTANCE_NAME'))
     
-    # Базовые конфигурации воркеров (всегда нужны)
     configs = {
-        # 📥 Воркер для Fillout API
-        'fillout': {
+        # 📥 Воркер для получения данных из внешних источников
+        'fillout_processing': {
             'concurrency': 2,
             'prefetch_multiplier': 1,
             'max_tasks_per_child': 100,
@@ -99,8 +106,8 @@ def get_worker_configs() -> Dict[str, Dict[str, Any]]:
             'soft_time_limit': 150,
         },
         
-        # 🔍 Воркер для базового поиска
-        'search_basic': {
+        # � Воркер для обработки и парсинга текстов
+        'text_processing': {
             'concurrency': 2,
             'prefetch_multiplier': 1,
             'max_tasks_per_child': 100,
@@ -108,8 +115,26 @@ def get_worker_configs() -> Dict[str, Dict[str, Any]]:
             'soft_time_limit': 240,
         },
         
-        # 💾 Дефолтный воркер
-        'default': {
+        # 🧠 Воркер для генерации эмбеддингов
+        'embeddings': {
+            'concurrency': 2,
+            'prefetch_multiplier': 1,
+            'max_tasks_per_child': 50,
+            'time_limit': 600,
+            'soft_time_limit': 540,
+        },
+        
+        # 🎯 Воркер для AI-реранжирования результатов
+        'reranking': {
+            'concurrency': 1,  # Один процесс для AI задач
+            'prefetch_multiplier': 1,
+            'max_tasks_per_child': 50,
+            'time_limit': 300,
+            'soft_time_limit': 240,
+        },
+        
+        # 🔄 Воркер для управления workflow и координации
+        'orchestration': {
             'concurrency': 2,
             'prefetch_multiplier': 2,
             'max_tasks_per_child': 500,
@@ -118,80 +143,59 @@ def get_worker_configs() -> Dict[str, Dict[str, Any]]:
         },
     }
     
-    # Условные конфигурации в зависимости от наличия GPU
-    if gpu_enabled:
-        # GPU сервер настроен - добавляем специализированные GPU воркеры
-        configs.update({
-            'embeddings_gpu': {
-                'concurrency': 1,  # GPU задачи - только 1 процесс
-                'prefetch_multiplier': 1,
-                'max_tasks_per_child': 50,
-                'time_limit': 600,
-                'soft_time_limit': 540,
-            },
-            'scoring_tasks': {
-                'concurrency': 1,  # Скоринг задачи - 1 процесс
-                'prefetch_multiplier': 1,
-                'max_tasks_per_child': 50,
-                'time_limit': 300,
-                'soft_time_limit': 240,
-            },
-        })
-    
     return configs
 
 
 def get_beat_schedule() -> Dict[str, Dict[str, Any]]:
     """Get periodic task schedule configuration"""
     return {
-        # 🔗 ЦЕПОЧКА A: Обработка резюме (включает получение данных, парсинг, GPU анализ) - каждые 30 минут
-        'resume-processing-chain': {
-            'task': 'tasks.workflows.resume_processing_chain',
+        # 🔗 Полный цикл обработки данных - каждые 30 минут
+        'full-processing-pipeline': {
+            'task': 'common.tasks.workflows.run_full_processing_pipeline',
             'schedule': 1800.0,  # каждые 30 минут
             'options': {
-                'queue': 'default',
+                'queue': ORCHESTRATION_QUEUE,
                 'priority': 8  # Высокий приоритет
             }
         },
         
-        # 🔗 ЦЕПОЧКА B: Обработка вакансий (включает получение данных, парсинг, GPU анализ) - каждые 45 минут
-        'job-processing-chain': {
-            'task': 'tasks.workflows.job_processing_chain',
-            'schedule': 2700.0,  # каждые 45 минут
-            'options': {
-                'queue': 'default',
-                'priority': 8  # Высокий приоритет
-            }
-        },
-        
-        # 🔧 Проверка состояния GPU сервера - каждые 15 минут
-        'gpu-health-check': {
-            'task': 'tasks.gpu_tasks.gpu_health_check',
+        # � Получение новых данных из Fillout - каждые 15 минут
+        'fetch-resume-data': {
+            'task': 'common.tasks.fillout_tasks.fetch_resume_data',
             'schedule': 900.0,  # каждые 15 минут
             'options': {
-                'queue': 'system',
-                'priority': 3  # Низкий приоритет
+                'queue': FILLOUT_PROCESSING_QUEUE,
+                'priority': 7
             }
         },
         
-        # 🔍 Проверка и запуск GPU сервера при необходимости - каждые 2 часа
-        'gpu-server-maintenance': {
-            'task': 'tasks.gpu_tasks.check_and_start_gpu_server',
+        # 🏢 Получение данных компаний - каждые 60 минут
+        'fetch-company-data': {
+            'task': 'common.tasks.fillout_tasks.fetch_company_data',
+            'schedule': 3600.0,  # каждый час
+            'options': {
+                'queue': FILLOUT_PROCESSING_QUEUE,
+                'priority': 5
+            }
+        },
+        
+        # 🧠 Генерация эмбеддингов - каждые 45 минут
+        'generate-all-embeddings': {
+            'task': 'common.tasks.embedding_tasks.generate_all_embeddings',
+            'schedule': 2700.0,  # каждые 45 минут
+            'options': {
+                'queue': EMBEDDINGS_QUEUE,
+                'priority': 6
+            }
+        },
+        
+        # 🎯 Запуск задач реранжирования - каждые 2 часа
+        'launch-reranking-tasks': {
+            'task': 'common.tasks.workflows.launch_reranking_tasks',
             'schedule': 7200.0,  # каждые 2 часа
-            'args': ['maintenance'],
             'options': {
-                'queue': 'system',
-                'priority': 5  # Средний приоритет
-            }
-        },
-        
-        # 🗑️ Очистка старых данных эмбеддингов - каждые 24 часа
-        'cleanup-embeddings': {
-            'task': 'tasks.embedding_tasks.cleanup_embeddings',
-            'schedule': 86400.0,  # каждые 24 часа
-            'options': {
-                'queue': 'default',
-                'priority': 1  # Минимальный приоритет
+                'queue': ORCHESTRATION_QUEUE,
+                'priority': 5
             }
         }
     }

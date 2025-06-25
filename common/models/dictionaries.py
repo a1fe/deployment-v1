@@ -2,7 +2,7 @@
 Общие справочники для системы HR Analysis
 """
 
-from models.base import Base
+from .base import Base
 from sqlalchemy import Column, Integer, String, Boolean, Text
 from sqlalchemy.orm import relationship
 
@@ -16,8 +16,8 @@ class Industry(Base):
     other_description = Column(Text)  # Для поддержки "Other" значений
     is_primary = Column(Boolean, nullable=False, default=True)
     
-    # Relationships
-    companies = relationship("CompanyIndustry", back_populates="industry")
+    # Relationships (используем строковые ссылки для избежания циклических импортов)
+    companies = relationship("CompanyIndustry", back_populates="industry", cascade="all, delete-orphan")
     submissions = relationship("Submission", secondary="submission_industries", back_populates="industries")
     
     def __repr__(self):

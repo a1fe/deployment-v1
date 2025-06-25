@@ -10,8 +10,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from models.base import Base
-from models.utils import ModelConstraints
+from ..base import Base
+from ..utils import ModelConstraints
 from .associations import (
     submission_competencies, submission_roles, 
     submission_industries, submission_locations

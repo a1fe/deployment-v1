@@ -5,8 +5,8 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy import Column, Integer, String, Text, Boolean
 from sqlalchemy.orm import relationship
-from models.base import Base
-from models.utils import TimestampMixin, ModelConstraints
+from ..base import Base
+from ..utils import TimestampMixin, ModelConstraints
 
 
 class Candidate(Base, TimestampMixin):

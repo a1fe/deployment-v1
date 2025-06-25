@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func, desc
 
 from .base_crud import BaseCRUD
-from models.companies import (
+from common.models.companies import (
     Company, CompanyContact, CompanyIndustry, Job, JobCompetency,
     HiringStage, JobCandidate, CandidateAction, CustomValue
 )
-from models.dictionaries import Industry, Competency
+from common.models.dictionaries import Industry, Competency
 
 
 class CompanyCRUD(BaseCRUD):

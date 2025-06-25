@@ -5,18 +5,16 @@ Workflow tasks for orchestrating the processing pipeline
 from typing import Dict, Any
 from celery.utils.log import get_task_logger
 from celery import group, chain, chord, signature
-from celery_app.celery_app import celery_app
-from database.operations.embedding_operations import embedding_crud
-from database.config import database
-
-from celery_app.celery_app import celery_app
+from common.celery_app.celery_app import celery_app
+from common.database.operations.embedding_operations import embedding_crud
+from common.database.config import database
 
 logger = get_task_logger(__name__)
 
 
 @celery_app.task(
     bind=True,
-    name='tasks.workflows.run_full_processing_pipeline',
+    name='common.tasks.workflows.run_full_processing_pipeline',
     soft_time_limit=3600,
     time_limit=4200,
     max_retries=2
@@ -41,11 +39,11 @@ def run_full_processing_pipeline(self, previous_results=None) -> Dict[str, Any]:
         logger.info(f"📥 Получены результаты предыдущего этапа: {previous_results}")
     
     try:
-        # Импортируем задачи
-        from tasks.fillout_tasks import fetch_resume_data, fetch_company_data
-        from tasks.parsing_tasks import parse_resume_text, parse_job_text
-        from tasks.embedding_tasks import generate_resume_embeddings, generate_job_embeddings
-        from tasks.reranking_tasks import rerank_resumes_for_job, rerank_jobs_for_resume
+        # Импортируем задачи с абсолютными путями
+        from common.tasks.fillout_tasks import fetch_resume_data, fetch_company_data
+        from common.tasks.parsing_tasks import parse_resume_text, parse_job_text
+        from common.tasks.embedding_tasks import generate_resume_embeddings, generate_job_embeddings
+        from common.tasks.reranking_tasks import rerank_resumes_for_job, rerank_jobs_for_resume
         
         def flatten(items):
             for x in items:
@@ -108,7 +106,7 @@ def run_full_processing_pipeline(self, previous_results=None) -> Dict[str, Any]:
 
 @celery_app.task(
     bind=True,
-    name='tasks.workflows.run_parsing_only',
+    name='common.tasks.workflows.run_parsing_only',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2
@@ -129,7 +127,7 @@ def run_parsing_only(self, previous_results=None) -> Dict[str, Any]:
         logger.info(f"📥 Получены результаты предыдущего этапа: {previous_results}")
     
     try:
-        from tasks.parsing_tasks import parse_resume_text, parse_job_text
+        from common.tasks.parsing_tasks import parse_resume_text, parse_job_text
         
         # Создаем pipeline только для парсинга
         parsing_chain = group([
@@ -161,7 +159,7 @@ def run_parsing_only(self, previous_results=None) -> Dict[str, Any]:
 
 @celery_app.task(
     bind=True,
-    name='tasks.workflows.run_embeddings_only',
+    name='common.tasks.workflows.run_embeddings_only',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2
@@ -182,7 +180,7 @@ def run_embeddings_only(self, previous_results=None) -> Dict[str, Any]:
         logger.info(f"📥 Получены результаты предыдущего этапа: {previous_results}")
     
     try:
-        from tasks.embedding_tasks import generate_resume_embeddings, generate_job_embeddings
+        from common.tasks.embedding_tasks import generate_resume_embeddings, generate_job_embeddings
         # Запускаем генерацию эмбеддингов как group
         embedding_group = group([
             generate_resume_embeddings.s(previous_results),
@@ -209,7 +207,7 @@ def run_embeddings_only(self, previous_results=None) -> Dict[str, Any]:
 
 @celery_app.task(
     bind=True,
-    name='tasks.workflows.run_reranking_only',
+    name='common.tasks.workflows.run_reranking_only',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2
@@ -256,7 +254,7 @@ def run_reranking_only(self, previous_results=None) -> Dict[str, Any]:
 
 @celery_app.task(
     bind=True,
-    name='tasks.workflows.launch_reranking_tasks',
+    name='common.tasks.workflows.launch_reranking_tasks',
     soft_time_limit=1800,
     time_limit=2100,
     max_retries=2
@@ -266,8 +264,8 @@ def launch_reranking_tasks(self, results) -> Dict[str, Any]:
     Запуск задач реранкинга по всем source_id из embedding_metadata
     """
 
-    from celery_app.queue_names import RERANKING_QUEUE
-    from utils.chroma_config import ChromaConfig
+    from common.celery_app.queue_names import RERANKING_QUEUE
+    from common.utils.chroma_config import ChromaConfig
     logger.info("🔄 [RERANK] Задача launch_reranking_tasks вызвана!")
     db = database.get_session()
     try:
@@ -285,9 +283,10 @@ def launch_reranking_tasks(self, results) -> Dict[str, Any]:
         logger.info(f"[RERANK] Найдено {len(job_ids)} job_ids: {job_ids}")
         if not resume_ids and not job_ids:
             logger.warning("[RERANK] Нет ни одного id для реранка! Проверьте таблицу embedding_metadata.")
-        # Импортируем Celery-задачи по имени
-        rerank_resumes_for_job = celery_app.tasks['tasks.reranking_tasks.rerank_resumes_for_job']
-        rerank_jobs_for_resume = celery_app.tasks['tasks.reranking_tasks.rerank_jobs_for_resume']
+        
+        # Импортируем задачи напрямую
+        from common.tasks.reranking_tasks import rerank_resumes_for_job, rerank_jobs_for_resume
+        
         # Запускаем задачи реранка с явным указанием очереди
         result = group([
             group([rerank_jobs_for_resume.s(sub_id).set(queue=RERANKING_QUEUE) for sub_id in resume_ids]),

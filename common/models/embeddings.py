@@ -2,10 +2,10 @@
 Модели для хранения метаданных эмбеддингов
 """
 
-from sqlalchemy import JSON, UniqueConstraint
-from .base import *
-
-print("Импортируется файл:", __file__)
+from sqlalchemy import JSON, UniqueConstraint, Column, String, Text, TIMESTAMP, UUID, Index
+from sqlalchemy.sql import func
+import uuid
+from .base import Base
 
 class EmbeddingMetadata(Base):
     """Модель для хранения метаданных эмбеддингов"""

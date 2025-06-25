@@ -5,7 +5,7 @@
 from typing import Optional, Dict, Any
 from sqlalchemy import Column, Integer, ForeignKey, DECIMAL, String, UUID
 from sqlalchemy.orm import relationship
-from models.base import Base
+from ..base import Base
 
 
 class SalaryExpectation(Base):

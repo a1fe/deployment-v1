@@ -147,7 +147,7 @@ def check_user_database_connection(params):
 def create_tables():
     """Создание таблиц через SQLAlchemy"""
     try:
-        from database.config import database
+        from common.database.config import database
         if database.create_tables():
             print("✅ Таблицы созданы успешно")
             
@@ -169,7 +169,7 @@ def create_tables():
 def apply_migrations():
     """Применение миграций к базе данных"""
     try:
-        from database.config import database
+        from common.database.config import database
         from sqlalchemy import text
         db = database.get_session()
         
@@ -276,8 +276,7 @@ def apply_migrations():
 def initialize_dictionaries():
     """Инициализация базовых справочников"""
     try:
-        sys.path.append(os.path.dirname(__file__))
-        from init_data import initialize_base_dictionaries
+        from common.database.init.init_data import initialize_base_dictionaries
         initialize_base_dictionaries()
         return True
     except Exception as e:

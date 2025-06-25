@@ -9,8 +9,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from models.base import Base
-from models.utils import TimestampMixin, ModelConstraints
+from ..base import Base
+from ..utils import TimestampMixin, ModelConstraints
 
 
 class HiringStage(Base):
